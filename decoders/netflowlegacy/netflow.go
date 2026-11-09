@@ -8,6 +8,9 @@ import (
 	"github.com/netsampler/goflow2/v2/decoders/utils"
 )
 
+// netFlowV5RecordSize is the wire size of one NetFlow v5 flow record.
+const netFlowV5RecordSize = 48
+
 // DecoderError wraps a NetFlow legacy decode error.
 type DecoderError struct {
 	Err error
@@ -49,8 +52,11 @@ func DecodeMessage(payload *bytes.Buffer, packet *PacketNetFlowV5) error {
 		return &DecoderError{err}
 	}
 
-	packet.Records = make([]RecordsNetFlowV5, int(packet.Count)) // maximum is 65535 which would be 3MB
-	for i := 0; i < int(packet.Count) && payload.Len() >= 48; i++ {
+	// Size the slice from the records the payload can hold, not from Count:
+	// a short payload with a large Count must not yield zero-value records.
+	count := min(int(packet.Count), payload.Len()/netFlowV5RecordSize)
+	packet.Records = make([]RecordsNetFlowV5, count)
+	for i := 0; i < count; i++ {
 		record := RecordsNetFlowV5{}
 		var srcAddr, dstAddr, nextHop uint32
 
